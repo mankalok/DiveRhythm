@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>跳水戰略模擬器 V2</title>
+  <style>
+    :root {
+      --body-bg: #0f0f0f;
+      --surface-dim: #18181b;
+      --surface-bright: #27272a;
+      --surface-translucent: rgba(24, 24, 27, 0.88);
+      --on-surface: #f4f4f5;
+      --on-surface-variant: #a1a1aa;
+      --primary: #3b82f6;
+      --accent-container: #1e3a8a;
+      --positive: #10b981;
+      --error: #ef4444;
+      --stroke-default: #3f3f46;
+      --ff-sans: system-ui, -apple-system, sans-serif;
+      --ff-mono: ui-monospace, SFMono-Regular, monospace;
+      --r-m: 12px;
+      --r-s: 8px;
+      --r-full: 9999px;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--body-bg);
+      color: var(--on-surface);
+      font-family: var(--ff-sans);
+      display: flex;
+      justify-content: center;
+    }
+
+    .widget-container {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-sizing: border-box;
+    }
+
+    .setup-deck {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: var(--surface-dim);
+      border-radius: var(--r-m);
+      border: 1px solid var(--stroke-default);
+    }
+
+    .deck-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chip-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .lumi-chip {
+      appearance: none;
+      background: var(--surface-bright);
+      color: var(--on-surface);
+      border: 1px solid var(--stroke-default);
+      border-radius: var(--r-full);
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .lumi-chip:hover {
+      background: #3f3f46;
+    }
+
+    .lumi-chip.is-active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    .lumi-input {
+      background: var(--surface-bright);
+      color: var(--on-surface);
+      border: 1px solid var(--stroke-default);
+      border-radius: var(--r-full);
+      padding: 6px 12px;
+      font-family: var(--ff-mono);
+      font-size: 15px;
+      outline: none;
+      width: 80px;
+      text-align: right;
+    }
+
+    .diff-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+      gap: 8px;
+      width: 100%;
+    }
+
+    .diff-card {
+      padding: 8px 10px;
+      background: var(--surface-bright);
+      border: 1px solid var(--stroke-default);
+      border-radius: var(--r-m);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      transition: all 0.15s ease;
+      text-align: center;
+      user-select: none;
+    }
+
+    .diff-card.is-active {
+      background: var(--accent-container);
+      border-color: var(--primary);
+    }
+
+    .diff-card .dd-badge {
+      font-family: var(--ff-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .diff-card .req-badge {
+      font-size: 11px;
+      color: var(--on-surface-variant);
+    }
+
+    .widget-viewport {
+      position: relative;
+      width: 100%;
+      height: 380px;
+      overflow: hidden;
+      border-radius: var(--r-m);
+      border: 1px solid var(--stroke-default);
+      background: #000;
+      user-select: none;
+    }
+
+    #vizCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .hud-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .hud-pill {
+      background: var(--surface-translucent);
+      backdrop-filter: blur(8px);
+      padding: 4px 12px;
+      border-radius: var(--r-full);
+      border: 1px solid var(--stroke-default);
+      font-family: var(--ff-mono);
+      font-size: 13px;
+      color: var(--on-surface);
+      font-weight: 600;
+    }
+
+    .beat-indicators {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .beat-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid #ffffff;
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+
+    .beat-dot.active {
+      transform: scale(1.3);
+      border-color: #facc15;
+      background: rgba(250, 204, 21, 0.4);
+    }
+
+    .beat-dot.hit {
+      background: var(--positive);
+      border-color: var(--positive);
+    }
+
+    .beat-dot.miss {
+      background: var(--error);
+      border-color: var(--error);
+    }
+
+    .tap-prompt {
+      position: absolute;
+      top: 55%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 10px 20px;
+      border-radius: var(--r-full);
+      border: 2px solid var(--primary);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      pointer-events: none;
+      text-align: center;
+      z-index: 10;
+    }
+
+    .judge-panel {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 12px;
+      background: var(--surface-dim);
+      border-radius: var(--r-m);
+      border: 1px solid var(--stroke-default);
+    }
+
+    .judge-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .judge-box .j-val {
+      font-family: var(--ff-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--on-surface);
+      padding: 4px 8px;
+      background: var(--surface-bright);
+      border-radius: var(--r-s);
+      border: 1px solid var(--stroke-default);
+      min-width: 36px;
+      text-align: center;
+    }
+
+    .judge-box.dropped .j-val {
+      text-decoration: line-through;
+      opacity: 0.35;
+    }
+
+    .judge-box .j-lbl {
+      font-size: 11px;
+      color: var(--on-surface-variant);
+    }
+
+    .action-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .lumi-btn {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 24px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: var(--r-full);
+      border: none;
+      cursor: pointer;
+      background: var(--primary);
+      color: #ffffff;
+      transition: all 0.15s ease;
+    }
+
+    .lumi-btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .lumi-btn:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+
+<div class="widget-container">
+  <div style="display: flex; flex-direction: column; gap: 2px;">
+    <h2 style="margin: 0; font-size: 22px; font-weight: 700;">跳水戰略模擬器 V2</h2>
+    <span style="font-size: 13px; color: var(--on-surface-variant);">
+      節拍天國式連擊 + 滾動鏡頭 + 真實難度分級！
+    </span>
+  </div>
+
+  <div class="setup-deck">
+    <div class="deck-row">
+      <label style="font-size: 14px; font-weight: 600;" for="gapInput">目標追分差距</label>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <input type="number" id="gapInput" class="lumi-input" value="75.5" step="0.5" min="10" max="150">
+        <span style="font-size: 14px; color: var(--on-surface-variant);">分</span>
+      </div>
+    </div>
+
+    <div class="deck-row">
+      <span style="font-size: 12px; color: var(--on-surface-variant);">快速差距：</span>
+      <div class="chip-group">
+        <button class="lumi-chip" onclick="setGap(45.0)">45.0</button>
+        <button class="lumi-chip" onclick="setGap(62.0)">62.0</button>
+        <button class="lumi-chip is-active" id="chipDefault" onclick="setGap(75.5)">75.5</button>
+        <button class="lumi-chip" onclick="setGap(88.0)">88.0</button>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span style="font-size: 13px; color: var(--on-surface-variant); font-weight: 600;">選擇難度動作 (DD)：</span>
+      <div class="diff-card-grid" id="diffGrid"></div>
+    </div>
+  </div>
+
+  <div class="widget-viewport" id="viewport">
+    <canvas id="vizCanvas" tabindex="0"></canvas>
+
+    <div class="hud-overlay">
+      <div class="hud-pill" id="hudDD">難度 3.8</div>
+      <div class="hud-pill" id="hudReq">需求平均: 6.6 / 10</div>
+    </div>
+
+    <div class="beat-indicators" id="beatIndicators"></div>
+    <div class="tap-prompt" id="tapPrompt" style="display: none;">跟着節奏點擊！</div>
+  </div>
+
+  <div class="judge-panel" id="judgePanel">
+    <div class="judge-box" id="jbox-0"><span class="j-val" id="jval-0">-.-</span><span class="j-lbl">裁判1</span></div>
+    <div class="judge-box" id="jbox-1"><span class="j-val" id="jval-1">-.-</span><span class="j-lbl">裁判2</span></div>
+    <div class="judge-box" id="jbox-2"><span class="j-val" id="jval-2">-.-</span><span class="j-lbl">裁判3</span></div>
+    <div class="judge-box" id="jbox-3"><span class="j-val" id="jval-3">-.-</span><span class="j-lbl">裁判4</span></div>
+    <div class="judge-box" id="jbox-4"><span class="j-val" id="jval-4">-.-</span><span class="j-lbl">裁判5</span></div>
+  </div>
+
+  <div class="action-bar">
+    <div id="resultText" style="font-size: 14px; font-weight: 600; color: var(--on-surface);">
+      請選擇難度並開始試跳。
+    </div>
+    <button type="button" id="mainBtn" class="lumi-btn" onclick="handleMainAction()">
+      開始試跳
+    </button>
+  </div>
+</div>
+
+<script>
+  // Audio Synthesizer (Web Audio API)
+  let audioCtx = null;
+  function initAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }
+
+  function playSound(type) {
+    if (!audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      const now = audioCtx.currentTime;
+
+      if (type === 'tick') {
+        osc.frequency.setValueAtTime(600, now);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } else if (type === 'hit') {
+        osc.frequency.setValueAtTime(880, now);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } else if (type === 'miss') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === 'splash') {
+        const bufferSize = audioCtx.sampleRate * 0.4;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+        const whiteNoise = audioCtx.createBufferSource();
+        whiteNoise.buffer = buffer;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, now);
+        filter.frequency.exponentialRampToValueAtTime(100, now + 0.4);
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.4, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+
+        whiteNoise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+
+        whiteNoise.start(now);
+        whiteNoise.stop(now + 0.4);
+      }
+    } catch(e) {}
+  }
+
+  // Difficulty Config
+  const DD_OPTIONS = [
+    { name: '101A', label: '向前跳水', dd: 1.2, beats: 2, speed: 1.0, window: 130 },
+    { name: '103B', label: '向前翻騰一周半', dd: 1.7, beats: 3, speed: 1.2, window: 110 },
+    { name: '107B', label: '向前翻騰三周半', dd: 3.0, beats: 4, speed: 1.5, window: 80 },
+    { name: '307C', label: '反身翻騰三周半', dd: 3.8, beats: 5, speed: 1.8, window: 55 },
+    { name: '109C', label: '向前翻騰四周半', dd: 4.1, beats: 6, speed: 2.2, window: 40 }
+  ];
+
+  let currentGap = 75.5;
+  let selectedDDIdx = 3; 
+  let gameState = 'IDLE'; 
+  let animId = null;
+
+  // World & Camera Settings (Mario Odyssey Style Scrolling)
+  const WORLD_HEIGHT = 1600; 
+  const PLATFORM_Y = 120;
+  const WATER_Y = 1450;
+  let cameraY = 0;
+  let diverY = PLATFORM_Y;
+
+  // Beat Sequence
+  let beatTimes = [];
+  let currentBeatIndex = 0;
+  let beatResults = [];
+  let startTime = 0;
+
+  // DOM
+  const gapInput = document.getElementById('gapInput');
+  const diffGrid = document.getElementById('diffGrid');
+  const canvas = document.getElementById('vizCanvas');
+  const ctx = canvas.getContext('2d');
+  const hudDD = document.getElementById('hudDD');
+  const hudReq = document.getElementById('hudReq');
+  const tapPrompt = document.getElementById('tapPrompt');
+  const beatIndicators = document.getElementById('beatIndicators');
+  const resultText = document.getElementById('resultText');
+  const mainBtn = document.getElementById('mainBtn');
+
+  function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+  }
+
+  function getRequiredAvg(dd, gap) {
+    return (gap / dd) / 3;
+  }
+
+  function renderDiffCards() {
+    diffGrid.innerHTML = '';
+    DD_OPTIONS.forEach((opt, idx) => {
+      const reqAvg = getRequiredAvg(opt.dd, currentGap);
+      const isImpossible = reqAvg > 10.0;
+      const isActive = idx === selectedDDIdx;
+
+      const card = document.createElement('div');
+      card.className = `diff-card ${isActive ? 'is-active' : ''}`;
+      card.onclick = () => selectDD(idx);
+
+      card.innerHTML = `
+        <span style="font-size: 13px; font-weight: 700;">${opt.name}</span>
+        <span class="dd-badge">DD ${opt.dd.toFixed(1)}</span>
+        <span class="req-badge" style="${isImpossible ? 'color: var(--error); font-weight: 700;' : ''}">
+          ${isImpossible ? '不可能達成' : '需平均 ' + reqAvg.toFixed(1) + '分'}
+        </span>
+      `;
+      diffGrid.appendChild(card);
+    });
+  }
+
+  function selectDD(idx) {
+    if (gameState === 'DIVING') return;
+    selectedDDIdx = idx;
+    renderDiffCards();
+    updateHUD();
+    resetSimulation();
+  }
+
+  function setGap(val) {
+    currentGap = val;
+    gapInput.value = val;
+    document.querySelectorAll('.chip-group .lumi-chip').forEach(chip => {
+      chip.classList.toggle('is-active', parseFloat(chip.textContent) === val);
+    });
+    renderDiffCards();
+    updateHUD();
+    resetSimulation();
+  }
+
+  gapInput.addEventListener('input', (e) => {
+    let val = parseFloat(e.target.value) || 0;
+    currentGap = Math.max(10, Math.min(150, val));
+    renderDiffCards();
+    updateHUD();
+    resetSimulation();
+  });
+
+  function updateHUD() {
+    const opt = DD_OPTIONS[selectedDDIdx];
+    const reqAvg = getRequiredAvg(opt.dd, currentGap);
+    hudDD.textContent = `難度 ${opt.dd.toFixed(1)} (${opt.name})`;
+    hudReq.textContent = `需求平均: ${reqAvg.toFixed(1)} / 10`;
+    hudReq.style.color = reqAvg > 10.0 ? 'var(--error)' : 'var(--on-surface)';
+  }
+
+  function setupBeatDots() {
+    beatIndicators.innerHTML = '';
+    const opt = DD_OPTIONS[selectedDDIdx];
+    for (let i = 0; i < opt.beats; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'beat-dot';
+      dot.id = `bdot-${i}`;
+      beatIndicators.appendChild(dot);
+    }
+  }
+
+  function resetSimulation() {
+    gameState = 'IDLE';
+    diverY = PLATFORM_Y;
+    cameraY = 0;
+    beatResults = [];
+    currentBeatIndex = 0;
+
+    setupBeatDots();
+    tapPrompt.style.display = 'none';
+    mainBtn.textContent = '開始試跳';
+
+    for (let i = 0; i < 5; i++) {
+      document.getElementById(`jval-${i}`).textContent = '-.-';
+      document.getElementById(`jbox-${i}`).className = 'judge-box';
+    }
+
+    resultText.textContent = '已就緒！點擊「開始試跳」跟著節奏點擊連擊！';
+    drawScene();
+  }
+
+  function handleMainAction() {
+    initAudio();
+    if (gameState === 'IDLE' || gameState === 'REVEALED') {
+      startDive();
+    } else if (gameState === 'DIVING') {
+      registerTap();
+    }
+  }
+
+  function startDive() {
+    gameState = 'DIVING';
+    diverY = PLATFORM_Y;
+    cameraY = 0;
+    currentBeatIndex = 0;
+    beatResults = [];
+
+    setupBeatDots();
+    mainBtn.textContent = '按節拍點擊！';
+    resultText.textContent = '專注節奏！跟著圓環對齊時點擊！';
+
+    const opt = DD_OPTIONS[selectedDDIdx];
+    const totalFallDistance = WATER_Y - PLATFORM_Y;
+    const baseDuration = 3200 / opt.speed; 
+
+    startTime = performance.now();
+    beatTimes = [];
+
+    const interval = baseDuration / (opt.beats + 1);
+    for (let i = 1; i <= opt.beats; i++) {
+      beatTimes.push(interval * i);
+    }
+
+    function animate(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / baseDuration, 1.0);
+
+      diverY = PLATFORM_Y + progress * totalFallDistance;
+
+      const canvasH = canvas.getBoundingClientRect().height;
+      const targetCamY = diverY - canvasH * 0.45;
+      cameraY = Math.max(0, Math.min(WORLD_HEIGHT - canvasH, targetCamY));
+
+      if (currentBeatIndex < opt.beats) {
+        const targetTime = beatTimes[currentBeatIndex];
+        if (elapsed > targetTime + opt.window) {
+          beatResults.push({ accuracy: 0, hit: false });
+          const dot = document.getElementById(`bdot-${currentBeatIndex}`);
+          if (dot) dot.className = 'beat-dot miss';
+          playSound('miss');
+          currentBeatIndex++;
+        } else if (Math.abs(elapsed - targetTime) <= opt.window) {
+          tapPrompt.style.display = 'block';
+          const dot = document.getElementById(`bdot-${currentBeatIndex}`);
+          if (dot && !dot.classList.contains('active')) {
+            dot.classList.add('active');
+            playSound('tick');
+          }
+        } else {
+          tapPrompt.style.display = 'none';
+        }
+      } else {
+        tapPrompt.style.display = 'none';
+      }
+
+      drawScene();
+
+      if (progress < 1.0) {
+        animId = requestAnimationFrame(animate);
+      } else {
+        playSound('splash');
+        while (beatResults.length < opt.beats) {
+          beatResults.push({ accuracy: 0, hit: false });
+        }
+        evaluateDive();
+      }
+    }
+
+    if (animId) cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(animate);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    initAudio();
+    if (gameState === 'DIVING') registerTap();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      initAudio();
+      if (gameState === 'DIVING') registerTap();
+      else if (gameState === 'IDLE' || gameState === 'REVEALED') startDive();
+    }
+  });
+
+  function registerTap() {
+    const opt = DD_OPTIONS[selectedDDIdx];
+    if (currentBeatIndex >= opt.beats) return;
+
+    const elapsed = performance.now() - startTime;
+    const targetTime = beatTimes[currentBeatIndex];
+    const delta = Math.abs(elapsed - targetTime);
+
+    if (delta <= opt.window * 1.5) {
+      const accuracy = Math.max(0, 1 - (delta / opt.window));
+      beatResults.push({ accuracy, hit: true });
+
+      const dot = document.getElementById(`bdot-${currentBeatIndex}`);
+      if (dot) dot.className = accuracy > 0.6 ? 'beat-dot hit' : 'beat-dot miss';
+
+      if (accuracy > 0.6) playSound('hit');
+      else playSound('miss');
+
+      currentBeatIndex++;
+    }
+  }
+
+  function evaluateDive() {
+    gameState = 'REVEALED';
+    tapPrompt.style.display = 'none';
+    mainBtn.textContent = '再次嘗試';
+
+    const opt = DD_OPTIONS[selectedDDIdx];
+
+    let totalAcc = 0;
+    beatResults.forEach(r => totalAcc += r.accuracy);
+    const avgAcc = beatResults.length > 0 ? totalAcc / beatResults.length : 0;
+
+    const baseJudgeScore = 2.0 + (avgAcc * 7.8);
+
+    const finalScores = [];
+    for (let i = 0; i < 5; i++) {
+      const varFactor = (Math.random() - 0.5) * 0.6;
+      let s = Math.round((baseJudgeScore + varFactor) * 2) / 2;
+      s = Math.max(2.0, Math.min(10.0, s));
+      finalScores.push(s);
+    }
+
+    const sorted = [...finalScores].map((val, idx) => ({ val, idx })).sort((a, b) => a.val - b.val);
+    const minIdx = sorted[0].idx;
+    const maxIdx = sorted[4].idx;
+
+    let midSum = 0;
+    finalScores.forEach((s, idx) => {
+      if (idx !== minIdx && idx !== maxIdx) midSum += s;
+    });
+
+    const totalScoreAchieved = Math.round((midSum * opt.dd) * 100) / 100;
+
+    finalScores.forEach((s, i) => {
+      const box = document.getElementById(`jbox-${i}`);
+      const val = document.getElementById(`jval-${i}`);
+      val.textContent = s.toFixed(1);
+      box.className = (i === minIdx || i === maxIdx) ? 'judge-box dropped' : 'judge-box';
+    });
+
+    if (totalScoreAchieved >= currentGap) {
+      resultText.innerHTML = `<span style="color: var(--positive);">得分：${totalScoreAchieved.toFixed(2)} 分！成功反超追分差距！🎉</span>`;
+    } else {
+      const diff = (currentGap - totalScoreAchieved).toFixed(2);
+      resultText.innerHTML = `<span style="color: var(--error);">得分：${totalScoreAchieved.toFixed(2)} 分。差 ${diff} 分成功，再試一次！</span>`;
+    }
+
+    drawScene();
+  }
+
+  function drawScene() {
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(0, -cameraY);
+
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, WATER_Y);
+    skyGrad.addColorStop(0, '#0284c7');
+    skyGrad.addColorStop(0.8, '#38bdf8');
+    skyGrad.addColorStop(1, '#7dd3fc');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, WATER_Y);
+
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, WATER_Y, w, WORLD_HEIGHT - WATER_Y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, WATER_Y, w, 6);
+
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(0, PLATFORM_Y, 120, 24);
+    ctx.fillRect(0, PLATFORM_Y, 35, WATER_Y - PLATFORM_Y);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px var(--ff-sans)';
+    ctx.fillText('10m 跳台', 15, PLATFORM_Y - 10);
+
+    const opt = DD_OPTIONS[selectedDDIdx];
+    if (gameState === 'DIVING' && currentBeatIndex < opt.beats) {
+      const targetTime = beatTimes[currentBeatIndex];
+      const elapsed = performance.now() - startTime;
+      const timeDiff = targetTime - elapsed;
+
+      const targetX = w / 2 + 40;
+      const targetY = diverY;
+
+      const ringRadius = Math.max(15, 15 + timeDiff * 0.18);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(targetX, targetY, ringRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(targetX, targetY, 18, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    const diverX = w / 2 + 40;
+    ctx.save();
+    ctx.translate(diverX, diverY);
+
+    if (diverY < WATER_Y) {
+      const rot = ((diverY - PLATFORM_Y) / (WATER_Y - PLATFORM_Y)) * Math.PI * 8;
+      ctx.rotate(rot);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, -14, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(0, 12);
+      ctx.lineTo(-8, 24);
+      ctx.moveTo(0, 12);
+      ctx.lineTo(8, 24);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, WATER_Y - diverY, 35, 0, Math.PI, true);
+      ctx.fill();
+    }
+
+    ctx.restore();
+    ctx.restore();
+  }
+
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    drawScene();
+  });
+
+  resizeCanvas();
+  renderDiffCards();
+  updateHUD();
+  resetSimulation();
+</script>
+</body>
+</html>
